@@ -1,0 +1,70 @@
+﻿<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MedicAI - Consultar Historia</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Consultar mi historia m&eacute;dica</h1>
+        <div class="user-info">
+          <a href="./welcome.html" class="btn-small">Inicio</a>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Acceso con c&oacute;digo de paciente</h2>
+        <p>Ingresa el c&oacute;digo de 8 caracteres que te proporcion&oacute; tu doctor para revisar tu historia m&eacute;dica.</p>
+
+        <form id="lookupForm" class="lookup-form">
+          <div class="form-group">
+            <label for="patientCode">C&oacute;digo del paciente</label>
+            <input
+              type="text"
+              id="patientCode"
+              placeholder="ej. A1B2C3D4"
+              maxlength="8"
+              required
+              style="text-transform: uppercase; letter-spacing: 2px; font-family: monospace;"
+            />
+          </div>
+          <button type="submit" id="lookupBtn">Consultar historia</button>
+          <span id="status"></span>
+        </form>
+      </div>
+
+      <div id="patientInfo" class="hidden">
+        <div class="section">
+          <h2>Informaci&oacute;n del paciente</h2>
+          <div class="patient-info">
+            <p><strong>Nombre:</strong> <span id="patientName"></span></p>
+            <p><strong>Fecha de nacimiento:</strong> <span id="patientBirthDate"></span></p>
+            <p><strong>Tel&eacute;fono:</strong> <span id="patientPhone"></span></p>
+            <p><strong>Contacto de emergencia:</strong> <span id="patientEmergency"></span></p>
+          </div>
+        </div>
+
+        <div id="recordsSection" class="section">
+          <h2>Historia cl&iacute;nica</h2>
+          <div id="recordsList"></div>
+        </div>
+      </div>
+
+      <div id="notFound" class="hidden">
+        <div class="section error">
+          <h2>Paciente no encontrado</h2>
+          <p>El c&oacute;digo ingresado no corresponde a ning&uacute;n paciente registrado.</p>
+          <p>Verifica que lo escribiste correctamente o contacta a tu doctor.</p>
+          <button onclick="resetLookup()">Intentar nuevamente</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="./patient-lookup.js"></script>
+  </body>
+</html>
+
+

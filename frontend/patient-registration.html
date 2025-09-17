@@ -1,0 +1,173 @@
+﻿<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MedicAI - Registro de Paciente</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Registro de paciente</h1>
+        <div class="user-info">
+          <span id="userName"></span>
+          <button id="logoutBtn" class="btn-small">Cerrar sesi&oacute;n</button>
+        </div>
+      </div>
+
+      <div id="authWarning" class="section hidden">
+        <p>Debes iniciar sesi&oacute;n como doctor para registrar pacientes.</p>
+        <button onclick="window.location.href='./login.html'">Ir a iniciar sesi&oacute;n</button>
+      </div>
+
+      <div id="registrationApp">
+        <form id="patientRegistrationForm" class="clinical-form">
+          <div class="section">
+            <h2>1. Informaci&oacute;n del paciente</h2>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="fullName">Nombre completo *</label>
+                <input type="text" id="fullName" required />
+              </div>
+              <div class="form-group">
+                <label for="dateOfBirth">Fecha de nacimiento *</label>
+                <input type="date" id="dateOfBirth" required />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="phone">Tel&eacute;fono</label>
+                <input type="tel" id="phone" />
+              </div>
+              <div class="form-group">
+                <label for="emergencyContact">Contacto de emergencia</label>
+                <input type="text" id="emergencyContact" />
+              </div>
+            </div>
+          </div>
+
+          <div class="section">
+            <h2>2. Signos vitales</h2>
+            <div class="vital-signs-grid">
+              <div class="form-group">
+                <label for="heartRate">Frecuencia card&iacute;aca (lpm)</label>
+                <input type="number" id="heartRate" min="40" max="200" />
+              </div>
+              <div class="form-group">
+                <label for="bpSystolic">Presi&oacute;n arterial sist&oacute;lica (mmHg)</label>
+                <input type="number" id="bpSystolic" min="70" max="250" />
+              </div>
+              <div class="form-group">
+                <label for="bpDiastolic">Presi&oacute;n arterial diast&oacute;lica (mmHg)</label>
+                <input type="number" id="bpDiastolic" min="40" max="150" />
+              </div>
+              <div class="form-group">
+                <label for="respiratoryRate">Frecuencia respiratoria (rpm)</label>
+                <input type="number" id="respiratoryRate" min="8" max="40" />
+              </div>
+              <div class="form-group">
+                <label for="temperature">Temperatura (&deg;C)</label>
+                <input type="number" id="temperature" step="0.1" min="35" max="42" />
+              </div>
+              <div class="form-group">
+                <label for="oxygenSaturation">Saturaci&oacute;n de ox&iacute;geno (%)</label>
+                <input type="number" id="oxygenSaturation" min="70" max="100" />
+              </div>
+              <div class="form-group">
+                <label for="weight">Peso (kg)</label>
+                <input type="number" id="weight" step="0.1" min="20" max="300" />
+              </div>
+              <div class="form-group">
+                <label for="height">Estatura (cm)</label>
+                <input type="number" id="height" min="50" max="250" />
+              </div>
+              <div class="form-group">
+                <label for="bloodGlucose">Glucosa capilar (mg/dL)</label>
+                <input type="number" id="bloodGlucose" min="50" max="500" />
+              </div>
+              <div class="form-group">
+                <label for="waistCircumference">Circunferencia de cintura (cm)</label>
+                <input type="number" id="waistCircumference" step="0.1" min="50" max="200" />
+              </div>
+              <div class="form-group">
+                <label for="painScale">Escala de dolor (0-10)</label>
+                <input type="number" id="painScale" min="0" max="10" />
+              </div>
+            </div>
+          </div>
+
+          <div class="section">
+            <h2>3. Historia cl&iacute;nica</h2>
+            <div class="form-group">
+              <label for="allergies">Alergias (separadas por comas)</label>
+              <input type="text" id="allergies" placeholder="ej. Penicilina, Mariscos" />
+            </div>
+            <div class="form-group">
+              <label for="currentMedications">Medicamentos actuales (separados por comas)</label>
+              <input type="text" id="currentMedications" placeholder="ej. Metformina 500 mg, Losart&aacute;n 50 mg" />
+            </div>
+            <div class="form-group">
+              <label for="pastHistory">Antecedentes m&eacute;dicos</label>
+              <textarea id="pastHistory" rows="3" placeholder="Historia m&eacute;dica relevante..."></textarea>
+            </div>
+            <div class="form-group">
+              <label for="familyHistory">Antecedentes familiares</label>
+              <textarea id="familyHistory" rows="3" placeholder="Historia familiar relevante..."></textarea>
+            </div>
+          </div>
+
+          <div class="section">
+            <h2>4. Consulta actual</h2>
+            <div class="form-group">
+              <label for="reasonForVisit">Motivo de consulta</label>
+              <textarea id="reasonForVisit" rows="3" placeholder="&iquest;Por qu&eacute; viene el paciente hoy?"></textarea>
+            </div>
+            <div class="form-group">
+              <label for="physicalExamination">Examen f&iacute;sico</label>
+              <textarea id="physicalExamination" rows="4" placeholder="Hallazgos del examen f&iacute;sico..."></textarea>
+            </div>
+            <div class="form-group">
+              <label for="assessment">Evaluaci&oacute;n</label>
+              <textarea id="assessment" rows="3" placeholder="Evaluaci&oacute;n cl&iacute;nica..."></textarea>
+            </div>
+            <div class="form-group">
+              <label for="diagnosis">Diagn&oacute;stico</label>
+              <textarea id="diagnosis" rows="2" placeholder="Diagn&oacute;stico principal..."></textarea>
+            </div>
+            <div class="form-group">
+              <label for="treatmentPlan">Plan de tratamiento</label>
+              <textarea id="treatmentPlan" rows="3" placeholder="Tratamiento prescrito..."></textarea>
+            </div>
+            <div class="form-group">
+              <label for="followUp">Seguimiento</label>
+              <textarea id="followUp" rows="2" placeholder="Recomendaciones de seguimiento..."></textarea>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button type="submit" id="registerBtn">Registrar paciente</button>
+            <span id="status"></span>
+          </div>
+        </form>
+
+        <div id="successMessage" class="hidden">
+          <h2>&iexcl;Paciente registrado exitosamente!</h2>
+          <div class="success-info">
+            <p><strong>Nombre:</strong> <span id="patientName"></span></p>
+            <p><strong>C&oacute;digo del paciente:</strong> <span id="patientCode" class="patient-code"></span></p>
+            <p class="important-note">&iexcl;Importante! Comparte este c&oacute;digo con el paciente para que pueda acceder a su informaci&oacute;n m&eacute;dica.</p>
+          </div>
+          <div class="actions">
+            <button onclick="resetForm()">Registrar otro paciente</button>
+            <button onclick="window.location.href='./doctor.html'">Volver al portal doctor</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="./patient-registration.js"></script>
+  </body>
+</html>
+
+

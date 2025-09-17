@@ -1,0 +1,39 @@
+﻿<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MedicAI - Iniciar sesi&oacute;n</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>MedicAI &ndash; Asistente M&eacute;dico</h1>
+
+      <div id="loginForm" class="auth-form">
+        <h2>Iniciar sesi&oacute;n</h2>
+        <form id="loginFormElement">
+          <div class="form-group">
+            <label for="loginEmail">Correo electr&oacute;nico</label>
+            <input type="email" id="loginEmail" required />
+          </div>
+          <div class="form-group">
+            <label for="loginPassword">Contrase&ntilde;a</label>
+            <input type="password" id="loginPassword" required />
+          </div>
+          <button type="submit">Iniciar sesi&oacute;n</button>
+        </form>
+        <p>&iquest;No tienes cuenta? <a href="./register.html" id="goToRegister">Reg&iacute;strate aqu&iacute;</a></p>
+      </div>
+
+      <div id="successMessage" class="hidden">
+        <h2>&iexcl;Bienvenido!</h2>
+        <p id="welcomeText"></p>
+        <button type="button" onclick="goToApp()">Continuar a la aplicaci&oacute;n</button>
+      </div>
+    </div>
+
+    <script src="./auth.js"></script>
+  </body>
+</html>
+

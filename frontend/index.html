@@ -1,0 +1,110 @@
+﻿<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MedicAI - Asistente Cl&iacute;nico</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>MedicAI &ndash; Asistente M&eacute;dico</h1>
+        <div class="user-info">
+          <span id="userName"></span>
+          <button id="logoutBtn" class="btn-small">Cerrar sesi&oacute;n</button>
+        </div>
+      </div>
+
+      <div id="loginPrompt" class="hidden">
+        <h2>Inicia sesi&oacute;n para continuar</h2>
+        <p>Debes iniciar sesi&oacute;n para utilizar el asistente m&eacute;dico.</p>
+        <button onclick="window.location.href='./login.html'">Ir al inicio de sesi&oacute;n</button>
+      </div>
+
+      <div id="appContent">
+        <div class="section">
+          <h2>Asistente de diagn&oacute;stico cl&iacute;nico</h2>
+          <label for="caseText">Caso cl&iacute;nico</label>
+          <textarea id="caseText" rows="10" placeholder="Describe aqu&iacute; el caso cl&iacute;nico..."></textarea>
+
+          <div class="actions">
+            <button id="analyzeBtn">Analizar</button>
+            <span id="status"></span>
+          </div>
+        </div>
+
+        <div id="results" class="results hidden">
+          <h2>Resultados</h2>
+          <div class="result-section">
+            <h3>Diagn&oacute;stico diferencial</h3>
+            <ul id="diffList"></ul>
+          </div>
+          <div class="result-section">
+            <h3>Pruebas sugeridas</h3>
+            <ul id="testList"></ul>
+          </div>
+          <div class="result-section">
+            <h3>Notas</h3>
+            <div id="notes"></div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>Historia cl&iacute;nica</h2>
+          <div id="historyContent">
+            <button id="loadHistoryBtn">Cargar mi historia</button>
+            <div id="historyList" class="hidden">
+              <h3>Mis registros cl&iacute;nicos</h3>
+              <div id="historyItems"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="doctorFeatures" class="section hidden">
+          <h2>Herramientas para doctores</h2>
+          <div class="feature-grid">
+            <div class="feature-card">
+              <h3>Mis pacientes</h3>
+              <button id="loadPatientsBtn">Ver registros de pacientes</button>
+              <div id="patientsList" class="hidden">
+                <h4>Registros de pacientes</h4>
+                <div id="patientsItems"></div>
+              </div>
+            </div>
+            <div class="feature-card">
+              <h3>Crear registro</h3>
+              <button id="createRecordBtn">Crear registro cl&iacute;nico</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="patientFeatures" class="section hidden">
+          <h2>Herramientas para pacientes</h2>
+          <div class="feature-grid">
+            <div class="feature-card">
+              <h3>Compartir registros</h3>
+              <div class="form-group">
+                <label for="doctorEmail">Correo del doctor</label>
+                <input type="email" id="doctorEmail" placeholder="doctor@ejemplo.com" />
+                <button id="shareRecordsBtn">Compartir mis registros</button>
+              </div>
+            </div>
+            <div class="feature-card">
+              <h3>Doctores disponibles</h3>
+              <button id="loadDoctorsBtn">Ver doctores</button>
+              <div id="doctorsList" class="hidden">
+                <h4>Doctores disponibles</h4>
+                <div id="doctorsItems"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="./script.js"></script>
+  </body>
+</html>
+
+

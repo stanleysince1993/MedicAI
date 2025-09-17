@@ -1,0 +1,599 @@
+﻿openapi: 3.0.3
+info:
+  title: MedicAI MVP API
+  version: 0.1.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  description: |
+    API del MVP para la app clínica (web) y GuardAigel (móvil). Incluye CRUD FHIR-like mínimo,
+    diagnóstico diferencial (LLM+RAG), CarePlan, ingestión de observaciones en series temporales,
+    adherencia, solicitudes de ajuste, calculadoras e ICD-10 sugerido.
+servers:
+  - url: https://api.medicai.local
+security:
+  - OAuth2: []
+components:
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: https://auth.example.com/authorize
+          tokenUrl: https://auth.example.com/token
+          scopes:
+            clinical.read: Lectura de recursos clínicos
+            clinical.write: Escritura de recursos clínicos
+            patient.read: Lectura de datos del paciente
+            patient.write: Escritura de datos del paciente
+  schemas:
+    Id:
+      type: string
+      format: uuid
+    Timestamp:
+      type: string
+      format: date-time
+    Gender:
+      type: string
+      enum: [male, female, other, unknown]
+    Consent:
+      type: object
+      required: [type, granted, timestamp]
+      properties:
+        type: { type: string, enum: [data-processing, devices, notifications, research] }
+        granted: { type: boolean }
+        timestamp: { $ref: '#/components/schemas/Timestamp' }
+    Patient:
+      type: object
+      required: [id, createdAt, givenName, familyName]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        givenName: { type: string }
+        familyName: { type: string }
+        gender: { $ref: '#/components/schemas/Gender' }
+        birthDate: { type: string, format: date }
+        contact: { type: object, properties: { phone: {type: string}, email: {type: string, format: email} } }
+        consents: { type: array, items: { $ref: '#/components/schemas/Consent' } }
+    Encounter:
+      type: object
+      required: [id, patientId, status, startedAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        patientId: { $ref: '#/components/schemas/Id' }
+        status: { type: string, enum: [planned, in-progress, completed, cancelled] }
+        reason: { type: string }
+        startedAt: { $ref: '#/components/schemas/Timestamp' }
+        endedAt: { $ref: '#/components/schemas/Timestamp' }
+    Note:
+      type: object
+      required: [id, encounterId, type, content, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        encounterId: { $ref: '#/components/schemas/Id' }
+        type: { type: string, enum: [SOAP, free-text] }
+        content: { type: string }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        authorId: { $ref: '#/components/schemas/Id' }
+    Source:
+      type: object
+      properties:
+        title: { type: string }
+        url: { type: string, format: uri }
+        snippet: { type: string }
+    DifferentialDxRequest:
+      type: object
+      required: [age, sex]
+      properties:
+        age: { type: integer, minimum: 0 }
+        sex: { $ref: '#/components/schemas/Gender' }
+        symptoms: { type: array, items: { type: string } }
+        vitals: { type: object, additionalProperties: true }
+        labs: { type: object, additionalProperties: true }
+        note: { type: string }
+    DifferentialDxResponse:
+      type: object
+      properties:
+        differentials:
+          type: array
+          items:
+            type: object
+            properties:
+              dx: { type: string }
+              rationale: { type: string }
+              score: { type: number, format: float }
+        tests:
+          type: array
+          items: { type: string }
+        sources:
+          type: array
+          items: { $ref: '#/components/schemas/Source' }
+        disclaimer: { type: string }
+    OrderItem:
+      type: object
+      properties:
+        kind: { type: string, enum: [MedicationRequest, Lab, Procedure, Instruction, Diet] }
+        description: { type: string }
+        schedule: { type: string }
+        dosage: { type: string }
+    Order:
+      type: object
+      required: [id, encounterId, status, items, version]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        encounterId: { $ref: '#/components/schemas/Id' }
+        status: { type: string, enum: [draft, issued, acknowledged, fulfilled, revised, cancelled] }
+        version: { type: integer, minimum: 1 }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/OrderItem' }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        revisedFrom: { $ref: '#/components/schemas/Id' }
+    CarePlanActivity:
+      type: object
+      properties:
+        kind: { type: string, enum: [MedicationRequest, Observation, Appointment, Instruction, Diet] }
+        description: { type: string }
+        schedule: { type: string }
+        status: { type: string, enum: [scheduled, in-progress, completed, on-hold, cancelled] }
+    CarePlan:
+      type: object
+      required: [id, patientId, status, intent, title, version]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        patientId: { $ref: '#/components/schemas/Id' }
+        status: { type: string, enum: [draft, active, completed, cancelled] }
+        intent: { type: string, enum: [plan, order] }
+        title: { type: string }
+        version: { type: integer, minimum: 1 }
+        activities:
+          type: array
+          items: { $ref: '#/components/schemas/CarePlanActivity' }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        revisedFrom: { $ref: '#/components/schemas/Id' }
+    Observation:
+      type: object
+      required: [id, patientId, code, value, unit, effectiveAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        patientId: { $ref: '#/components/schemas/Id' }
+        code: { type: string, example: 'glucose' }
+        value: { oneOf: [{ type: number }, { type: string }] }
+        unit: { type: string, example: 'mg/dL' }
+        effectiveAt: { $ref: '#/components/schemas/Timestamp' }
+        source: { type: string, example: 'apple-healthkit|google-fit|ble-device|manual' }
+    AdherenceEvent:
+      type: object
+      required: [id, patientId, orderItemId, status, takenAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        patientId: { $ref: '#/components/schemas/Id' }
+        orderItemId: { $ref: '#/components/schemas/Id' }
+        status: { type: string, enum: [taken, skipped, late] }
+        takenAt: { $ref: '#/components/schemas/Timestamp' }
+        proofUrl: { type: string, format: uri }
+    AdjustmentRequest:
+      type: object
+      required: [id, patientId, reason, status, createdAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        patientId: { $ref: '#/components/schemas/Id' }
+        orderId: { $ref: '#/components/schemas/Id' }
+        fieldPath: { type: string, example: 'items[0].dosage' }
+        newValue: { type: string }
+        reason: { type: string }
+        status: { type: string, enum: [requested, under-review, approved, rejected] }
+        createdAt: { $ref: '#/components/schemas/Timestamp' }
+        decision:
+          type: object
+          properties:
+            decidedBy: { $ref: '#/components/schemas/Id' }
+            decidedAt: { $ref: '#/components/schemas/Timestamp' }
+            rationale: { type: string }
+    ICD10Suggestion:
+      type: object
+      properties:
+        code: { type: string }
+        label: { type: string }
+        confidence: { type: number, format: float }
+        spans:
+          type: array
+          items:
+            type: object
+            properties:
+              start: { type: integer }
+              end: { type: integer }
+              text: { type: string }
+    ICD10SuggestionResponse:
+      type: object
+      properties:
+        codes:
+          type: array
+          items: { $ref: '#/components/schemas/ICD10Suggestion' }
+    CalculatorResponse:
+      type: object
+      properties:
+        tool: { type: string }
+        value: { type: number }
+        units: { type: string }
+        flags: { type: array, items: { type: string } }
+    DashboardSummary:
+      type: object
+      properties:
+        patientId: { $ref: '#/components/schemas/Id' }
+        lastVitals:
+          type: object
+          additionalProperties: true
+        adherenceRate: { type: number }
+        activeAlerts: { type: integer }
+        timeseries:
+          type: array
+          items:
+            type: object
+            properties:
+              code: { type: string }
+              points:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    t: { $ref: '#/components/schemas/Timestamp' }
+                    v: { oneOf: [{ type: number }, { type: string }] }
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string, example: bad_request }
+        message: { type: string }
+        details:
+          type: array
+          items: { type: object, additionalProperties: true }
+  responses:
+    ErrorResponse:
+      description: Error en la solicitud o autenticación
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+paths:
+  /auth/me:
+    get:
+      summary: Información del usuario autenticado
+      operationId: getAuthenticatedUser
+      security: [{ OAuth2: [] }]
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '200': { description: OK }
+  /patients:
+    get:
+      summary: Listar pacientes
+      operationId: listPatients
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '200':
+          description: Lista de pacientes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Patient' }
+    post:
+      summary: Crear paciente
+      operationId: createPatient
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Patient' }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '201': { description: Creado }
+  /patients/{id}:
+    get:
+      summary: Obtener paciente
+      operationId: getPatientById
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/Id' }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '200':
+          description: Paciente
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Patient' }
+  /encounters:
+    post:
+      summary: Crear encuentro clínico
+      operationId: createEncounter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Encounter' }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '201': { description: Creado }
+  /encounters/{id}:
+    get:
+      summary: Obtener encuentro por ID
+      operationId: getEncounterById
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/Id' }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '200':
+          description: Encuentro
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Encounter' }
+  /encounters/{id}/notes:
+    post:
+      summary: Añadir nota (SOAP o texto libre) a un encuentro
+      operationId: addEncounterNote
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/Id' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Note' }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '201': { description: Creado }
+  /dx-diff:
+    post:
+      summary: Obtener diagnóstico diferencial (LLM + RAG)
+      operationId: generateDifferential
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DifferentialDxRequest' }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '200':
+          description: Diferenciales, pruebas sugeridas y fuentes
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DifferentialDxResponse' }
+  /ask:
+    post:
+      summary: Preguntar al motor RAG y obtener respuesta con fuentes
+      operationId: askKnowledgeEngine
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query: { type: string }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '200':
+          description: Respuesta con fuentes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  answer: { type: string }
+                  sources:
+                    type: array
+                    items: { $ref: '#/components/schemas/Source' }
+  /orders:
+    post:
+      summary: Emitir una orden (meds, labs, instrucciones, dieta)
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Order' }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '201': { description: Creado }
+  /orders/{id}:
+    get:
+      summary: Obtener una orden por ID
+      operationId: getOrderById
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/Id' }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '200':
+          description: Orden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+  /orders/{id}/revise:
+    post:
+      summary: Revisar/Versionar una orden existente
+      operationId: reviseOrder
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/Id' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                changes: { type: object }
+                rationale: { type: string }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '201': { description: Nueva versión creada }
+  /careplan/{patientId}:
+    get:
+      summary: Obtener CarePlan vigente del paciente
+      operationId: getCurrentCarePlan
+      parameters:
+        - in: path
+          name: patientId
+          required: true
+          schema: { $ref: '#/components/schemas/Id' }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '200':
+          description: CarePlan
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CarePlan' }
+  /icd10/suggest:
+    post:
+      summary: Sugerir códigos ICD-10 desde texto clínico
+      operationId: suggestICD10Codes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text: { type: string }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '200':
+          description: Lista de códigos sugeridos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ICD10SuggestionResponse' }
+  /calculate:
+    get:
+      summary: Ejecutar calculadora médica (querystring)
+      operationId: runMedicalCalculator
+      parameters:
+        - in: query
+          name: tool
+          required: true
+          schema: { type: string, example: egfr }
+        - in: query
+          name: inputs
+          schema: { type: string, description: "JSON serializado con inputs" }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '200':
+          description: Resultado calculadora
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CalculatorResponse' }
+  /observations/batch:
+    post:
+      summary: Ingesta batch de observaciones (series temporales)
+      operationId: ingestObservationBatch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                patientId: { $ref: '#/components/schemas/Id' }
+                observations:
+                  type: array
+                  items: { $ref: '#/components/schemas/Observation' }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '202': { description: Aceptado para procesamiento }
+  /adherence:
+    post:
+      summary: Registrar evento de adherencia (toma/omisión)
+      operationId: recordAdherenceEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdherenceEvent' }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '201': { description: Creado }
+  /adjustments:
+    post:
+      summary: Crear solicitud de ajuste de tratamiento
+      operationId: createAdjustmentRequest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdjustmentRequest' }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '201': { description: Creado }
+  /adjustments/{id}/decision:
+    post:
+      summary: Resolver solicitud de ajuste (aprobar/rechazar)
+      operationId: decideAdjustmentRequest
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/Id' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [approved, rejected] }
+                rationale: { type: string }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '200': { description: Actualizado }
+  /dashboard/{patientId}:
+    get:
+      summary: Resumen de dashboard (vitales, adherencia, alertas)
+      operationId: getDashboardSummary
+      parameters:
+        - in: path
+          name: patientId
+          required: true
+          schema: { $ref: '#/components/schemas/Id' }
+      responses:
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '200':
+          description: Resumen
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardSummary' }

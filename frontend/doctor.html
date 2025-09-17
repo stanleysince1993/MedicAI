@@ -1,0 +1,70 @@
+﻿<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MedicAI - Portal Doctor</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Portal Doctor</h1>
+        <div class="user-info">
+          <span id="userName"></span>
+          <button id="logoutBtn" class="btn-small">Cerrar sesi&oacute;n</button>
+        </div>
+      </div>
+
+      <div id="authWarning" class="section hidden">
+        <p>Debes iniciar sesi&oacute;n como doctor para usar esta p&aacute;gina.</p>
+        <button onclick="window.location.href='./login.html'">Ir a iniciar sesi&oacute;n</button>
+      </div>
+
+      <div id="doctorApp">
+        <div class="section">
+          <h2>Asistente de diagn&oacute;stico cl&iacute;nico</h2>
+          <label for="caseText">Caso cl&iacute;nico</label>
+          <textarea id="caseText" rows="8" placeholder="Describe el caso cl&iacute;nico aqu&iacute;..."></textarea>
+          <div class="actions">
+            <button id="analyzeBtn">Analizar</button>
+            <span id="status"></span>
+          </div>
+
+          <div id="results" class="results hidden">
+            <h3>Resultados</h3>
+            <div class="result-section">
+              <h4>Diagn&oacute;stico diferencial</h4>
+              <ul id="diffList"></ul>
+            </div>
+            <div class="result-section">
+              <h4>Pruebas sugeridas</h4>
+              <ul id="testList"></ul>
+            </div>
+            <div class="result-section">
+              <h4>Notas</h4>
+              <div id="notes"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>Gesti&oacute;n de pacientes</h2>
+          <div class="actions">
+            <button onclick="window.location.href='./patient-registration.html'" class="btn-primary">
+              Registrar nuevo paciente
+            </button>
+            <button id="loadPatientsBtn">Ver mis pacientes</button>
+          </div>
+          <div id="patientsList" class="hidden">
+            <div id="patientsItems"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="./doctor.js"></script>
+  </body>
+</html>
+
+

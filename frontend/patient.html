@@ -1,0 +1,61 @@
+﻿<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MedicAI - Portal Paciente</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Portal Paciente</h1>
+        <div class="user-info">
+          <span id="userName"></span>
+          <button id="logoutBtn" class="btn-small">Cerrar sesi&oacute;n</button>
+        </div>
+      </div>
+
+      <div id="authWarning" class="section hidden">
+        <p>Debes iniciar sesi&oacute;n como paciente para usar esta p&aacute;gina.</p>
+        <button onclick="window.location.href='./login.html'">Ir a iniciar sesi&oacute;n</button>
+      </div>
+
+      <div id="patientApp">
+        <div class="section">
+          <h2>Mi historia cl&iacute;nica</h2>
+          <div class="actions">
+            <button onclick="window.location.href='./patient-lookup.html'" class="btn-primary">
+              Consultar con c&oacute;digo
+            </button>
+            <button id="loadHistoryBtn">Cargar mi historia</button>
+          </div>
+          <div id="historyList" class="hidden">
+            <div id="historyItems"></div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>Compartir mis registros</h2>
+          <div class="form-group">
+            <label for="doctorEmail">Correo del doctor</label>
+            <input id="doctorEmail" type="email" placeholder="doctor@ejemplo.com" />
+            <button id="shareRecordsBtn">Compartir</button>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>Doctores disponibles</h2>
+          <button id="loadDoctorsBtn">Ver doctores</button>
+          <div id="doctorsList" class="hidden">
+            <div id="doctorsItems"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="./patient.js"></script>
+  </body>
+</html>
+
+

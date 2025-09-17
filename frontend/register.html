@@ -1,0 +1,68 @@
+﻿<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MedicAI - Registro</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>MedicAI &ndash; Registro de usuarios</h1>
+
+      <div id="registerForm" class="auth-form">
+        <h2>Crear una cuenta</h2>
+        <form id="registerFormElement">
+          <div class="form-group">
+            <label for="regEmail">Correo electr&oacute;nico</label>
+            <input type="email" id="regEmail" required />
+          </div>
+          <div class="form-group">
+            <label for="regPassword">Contrase&ntilde;a</label>
+            <input type="password" id="regPassword" required />
+          </div>
+          <div class="form-group">
+            <label for="regFullName">Nombre completo</label>
+            <input type="text" id="regFullName" required />
+          </div>
+          <div class="form-group">
+            <label for="regUserType">Perfil</label>
+            <select id="regUserType" required>
+              <option value="">Seleccionar...</option>
+              <option value="doctor">Doctor</option>
+              <option value="patient">Paciente</option>
+            </select>
+          </div>
+
+          <div id="doctorFields" class="hidden">
+            <div class="form-group">
+              <label for="regLicense">N&uacute;mero de licencia</label>
+              <input type="text" id="regLicense" />
+            </div>
+            <div class="form-group">
+              <label for="regSpecialization">Especializaci&oacute;n</label>
+              <input type="text" id="regSpecialization" placeholder="ej. Cardiolog&iacute;a, Neurolog&iacute;a" />
+            </div>
+          </div>
+
+          <div id="patientFields" class="hidden">
+            <div class="form-group">
+              <label for="regBirthDate">Fecha de nacimiento</label>
+              <input type="date" id="regBirthDate" />
+            </div>
+            <div class="form-group">
+              <label for="regPhone">N&uacute;mero de tel&eacute;fono</label>
+              <input type="tel" id="regPhone" />
+            </div>
+          </div>
+
+          <button type="submit">Registrarse</button>
+        </form>
+        <p>&iquest;Ya tienes cuenta? <a href="./login.html" id="goToLogin">Inicia sesi&oacute;n aqu&iacute;</a></p>
+      </div>
+
+     
+    <script src="./auth.js"></script>
+  </body>
+</html>
+
