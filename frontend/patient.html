@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="es">
   <head>
     <meta charset="utf-8" />
@@ -36,6 +36,37 @@
         </div>
 
         <div class="section">
+          <h2>Solicitar ajuste de tratamiento</h2>
+          <div class="grid-form" id="adjustmentForm">
+            <label class="input-item" for="adjustFieldPath">
+              Campo a modificar (ej. medicacion.dosis)
+              <input id="adjustFieldPath" type="text" placeholder="items[0].dosage" required />
+            </label>
+            <label class="input-item" for="adjustNewValue">
+              Nuevo valor sugerido
+              <input id="adjustNewValue" type="text" placeholder="Nuevo valor" required />
+            </label>
+            <label class="input-item" for="adjustReason">
+              Motivo
+              <textarea id="adjustReason" rows="3" placeholder="Describe por qu&eacute; necesitas el cambio"></textarea>
+            </label>
+          </div>
+          <button id="submitAdjustmentBtn" class="btn-primary">Enviar solicitud</button>
+        </div>
+
+        <div class="section">
+          <h2>Mis solicitudes de ajuste</h2>
+          <button id="refreshAdjustmentsBtn" class="btn-secondary">Actualizar</button>
+          <div id="patientAdjustments" class="list-container"></div>
+        </div>
+
+        <div class="section">
+          <h2>Notificaciones</h2>
+          <button id="loadNotificationsBtn" class="btn-secondary">Actualizar</button>
+          <div id="notificationsList" class="list-container"></div>
+        </div>
+
+        <div class="section">
           <h2>Compartir mis registros</h2>
           <div class="form-group">
             <label for="doctorEmail">Correo del doctor</label>
@@ -57,5 +88,3 @@
     <script src="./patient.js"></script>
   </body>
 </html>
-
-

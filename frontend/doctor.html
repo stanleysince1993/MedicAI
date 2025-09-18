@@ -1,4 +1,4 @@
-ï»¿<!doctype html>
+<!doctype html>
 <html lang="es">
   <head>
     <meta charset="utf-8" />
@@ -12,29 +12,30 @@
         <h1>Portal Doctor</h1>
         <div class="user-info">
           <span id="userName"></span>
-          <button id="logoutBtn" class="btn-small">Cerrar sesi&oacute;n</button>
+          <button id="logoutBtn" class="btn-small">Cerrar sesión</button>
         </div>
       </div>
 
       <div id="authWarning" class="section hidden">
-        <p>Debes iniciar sesi&oacute;n como doctor para usar esta p&aacute;gina.</p>
-        <button onclick="window.location.href='./login.html'">Ir a iniciar sesi&oacute;n</button>
+        <p>Debes iniciar sesión como doctor para usar esta página.</p>
+        <button onclick="window.location.href='./login.html'">Ir a iniciar sesión</button>
       </div>
 
       <div id="doctorApp">
         <div class="section">
-          <h2>Asistente de diagn&oacute;stico cl&iacute;nico</h2>
-          <label for="caseText">Caso cl&iacute;nico</label>
-          <textarea id="caseText" rows="8" placeholder="Describe el caso cl&iacute;nico aqu&iacute;..."></textarea>
+          <h2>Asistente de diagnóstico clínico</h2>
+          <label for="caseText">Caso clínico</label>
+          <textarea id="caseText" rows="8" placeholder="Describe el caso clínico aquí..."></textarea>
           <div class="actions">
             <button id="analyzeBtn">Analizar</button>
+            <button id="suggestIcdBtn" class="btn-secondary">Sugerir ICD-10</button>
             <span id="status"></span>
           </div>
 
           <div id="results" class="results hidden">
             <h3>Resultados</h3>
             <div class="result-section">
-              <h4>Diagn&oacute;stico diferencial</h4>
+              <h4>Diagnóstico diferencial</h4>
               <ul id="diffList"></ul>
             </div>
             <div class="result-section">
@@ -46,10 +47,56 @@
               <div id="notes"></div>
             </div>
           </div>
+
+          <div id="icdSuggestions" class="results hidden">
+            <h3>Códigos ICD-10 sugeridos</h3>
+            <ul id="icdResults" class="result-list"></ul>
+            <div class="result-section">
+              <h4>Seleccionados</h4>
+              <ul id="icdAccepted"></ul>
+            </div>
+          </div>
         </div>
 
         <div class="section">
-          <h2>Gesti&oacute;n de pacientes</h2>
+          <h2>Ajustes de tratamiento</h2>
+          <p class="hint">Solicitudes de ajuste pendientes enviadas por tus pacientes.</p>
+          <button id="loadAdjustmentsBtn" class="btn-secondary">Actualizar lista</button>
+          <div id="adjustmentsContainer" class="list-container"></div>
+        </div>
+
+        <div class="section">
+          <h2>Dashboard de alertas</h2>
+          <div class="actions gap">
+            <input id="dashboardPatientId" type="text" placeholder="ID del paciente" />
+            <button id="loadDashboardBtn">Cargar dashboard</button>
+          </div>
+          <div id="dashboardSummary" class="hidden">
+            <p><strong>Alertas activas:</strong> <span id="activeAlertsCount">0</span></p>
+            <div id="alertsList" class="list-container"></div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>Calculadoras médicas</h2>
+          <div class="actions gap">
+            <label for="calculatorSelect">Herramienta</label>
+            <select id="calculatorSelect">
+              <option value="bmi">Índice de Masa Corporal (IMC)</option>
+              <option value="egfr">eGFR (CKD-EPI)</option>
+              <option value="cha2ds2-vasc">CHA2DS2-VASc</option>
+              <option value="curb-65">CURB-65</option>
+            </select>
+          </div>
+          <form id="calculatorForm">
+            <div id="calculatorInputs" class="grid-form"></div>
+            <button type="submit" class="btn-primary">Calcular</button>
+          </form>
+          <div id="calculatorResult" class="results hidden"></div>
+        </div>
+
+        <div class="section">
+          <h2>Gestión de pacientes</h2>
           <div class="actions">
             <button onclick="window.location.href='./patient-registration.html'" class="btn-primary">
               Registrar nuevo paciente
@@ -66,5 +113,3 @@
     <script src="./doctor.js"></script>
   </body>
 </html>
-
-

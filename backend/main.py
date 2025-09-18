@@ -1,4 +1,5 @@
 import os
+import json
 import subprocess
 import asyncio
 from typing import Any, Dict, List, Optional
@@ -11,10 +12,16 @@ from pydantic import BaseModel, Field
 
 # Local imports
 from .services.openai_service import OpenAIAnalyzer, FallbackAnalyzer
+from .services.alert_engine import AlertEngine
+from .services.icd10_suggester import icd10_suggester
+from .services.calculators import calculators, CalculatorError
 from .models import (
     User, ClinicalRecord, PatientAccess, UserType, VitalSigns,
     LoginRequest, RegisterRequest, ClinicalRecordRequest, SharePatientRequest,
-    PatientRegistrationRequest
+    PatientRegistrationRequest, TreatmentAdjustment, AdjustmentCreatePayload,
+    AdjustmentDecisionPayload, AdjustmentStatus, AdjustmentDecision,
+    AdjustmentAuditEntry, CarePlanRevision, Notification, NotificationSeverity,
+    ObservationBatchRequest, Observation, AlertStatusUpdate, AlertStatus
 )
 from .database import db
 from .auth import hash_password, verify_password, create_token, get_current_user, get_current_doctor, get_current_patient
@@ -39,6 +46,11 @@ class AnalyzeResponse(BaseModel):
     differentials: List[DifferentialItem]
     tests: List[TestSuggestion]
     notes: Optional[str] = None
+
+class ICD10SuggestRequest(BaseModel):
+    text: str = Field(..., min_length=10, description="Clinical narration")
+    review_threshold: Optional[float] = Field(None, ge=0.0, le=1.0)
+
 
 
 class TerminalRequest(BaseModel):
@@ -73,6 +85,7 @@ def create_app() -> FastAPI:
     if openai_enabled:
         openai_analyzer = OpenAIAnalyzer(api_key=openai_api_key, model=model)
     fallback_analyzer = FallbackAnalyzer()
+    alerts_engine = AlertEngine()
 
     @app.post("/analyze", response_model=AnalyzeResponse)
     async def analyze_case(payload: AnalyzeRequest) -> Any:
@@ -411,6 +424,327 @@ def create_app() -> FastAPI:
             }
         }
 
+
+    @app.post("/adjustments", status_code=status.HTTP_201_CREATED)
+    async def create_adjustment_request(
+        payload: AdjustmentCreatePayload,
+        current_patient: User = Depends(get_current_patient)
+    ) -> Dict[str, Any]:
+        if payload.patient_id != current_patient.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Can only create adjustments for your own profile"
+            )
+
+        adjustment = TreatmentAdjustment(
+            patient_id=current_patient.id,
+            requested_by=current_patient.id,
+            order_id=payload.order_id,
+            field_path=payload.field_path,
+            new_value=payload.new_value,
+            reason=payload.reason,
+        )
+
+        audit_entry = AdjustmentAuditEntry(
+            adjustment_id=adjustment.id,
+            actor_id=current_patient.id,
+            actor_role=current_patient.user_type,
+            action="requested",
+            notes=payload.reason,
+        )
+        adjustment.audit_trail.append(audit_entry)
+
+        adjustment = db.create_adjustment(adjustment)
+
+        return {"adjustment": adjustment.dict()}
+
+
+    @app.get("/adjustments")
+    async def list_adjustment_requests(
+        status_filter: Optional[str] = None,
+        patient_id: Optional[str] = None,
+        current_user: User = Depends(get_current_user)
+    ) -> Dict[str, Any]:
+        status_enum: Optional[AdjustmentStatus] = None
+        if status_filter is not None:
+            try:
+                status_enum = AdjustmentStatus(status_filter)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid status filter"
+                ) from exc
+
+        if current_user.user_type == UserType.PATIENT:
+            if patient_id and patient_id != current_user.id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Patients can only view their own adjustments"
+                )
+            adjustments = db.list_patient_adjustments(current_user.id)
+        else:
+            adjustments = db.list_all_adjustments()
+            if patient_id:
+                adjustments = [adj for adj in adjustments if adj.patient_id == patient_id]
+            else:
+                adjustments = [
+                    adj for adj in adjustments
+                    if adj.status in (AdjustmentStatus.REQUESTED, AdjustmentStatus.UNDER_REVIEW)
+                ]
+
+        if status_enum is not None:
+            adjustments = [adj for adj in adjustments if adj.status == status_enum]
+
+        return {"adjustments": [adj.dict() for adj in adjustments]}
+
+    @app.post("/adjustments/{adjustment_id}/decision")
+    async def decide_adjustment_request(
+        adjustment_id: str,
+        payload: AdjustmentDecisionPayload,
+        current_doctor: User = Depends(get_current_doctor)
+    ) -> Dict[str, Any]:
+        adjustment = db.get_adjustment_by_id(adjustment_id)
+        if adjustment is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Adjustment not found"
+            )
+
+        if adjustment.status not in (AdjustmentStatus.REQUESTED, AdjustmentStatus.UNDER_REVIEW):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Adjustment request has already been resolved"
+            )
+
+        adjustment.status = payload.status
+        adjustment.decision = AdjustmentDecision(
+            decided_by=current_doctor.id,
+            status=payload.status,
+            rationale=payload.rationale,
+        )
+
+        audit_entry = AdjustmentAuditEntry(
+            adjustment_id=adjustment.id,
+            actor_id=current_doctor.id,
+            actor_role=current_doctor.user_type,
+            action=f"decision:{payload.status.value}",
+            notes=payload.rationale,
+        )
+        adjustment.audit_trail.append(audit_entry)
+
+        adjustment = db.update_adjustment(adjustment)
+
+        revision_dict: Optional[Dict[str, Any]] = None
+        if payload.status == AdjustmentStatus.APPROVED:
+            revision = CarePlanRevision(
+                patient_id=adjustment.patient_id,
+                order_id=adjustment.order_id,
+                field_path=adjustment.field_path,
+                value=adjustment.new_value,
+                revised_from=adjustment.order_id,
+                created_by=current_doctor.id,
+            )
+            db.create_careplan_revision(revision)
+            revision_dict = revision.dict()
+
+        severity = NotificationSeverity.INFO if payload.status == AdjustmentStatus.APPROVED else NotificationSeverity.WARNING
+        notification = Notification(
+            user_id=adjustment.patient_id,
+            title="Solicitud de ajuste actualizada",
+            message=(
+                "Tu solicitud de ajuste fue aprobada. Ingresa a MedicAI para revisar los detalles."
+                if payload.status == AdjustmentStatus.APPROVED
+                else "Tu solicitud de ajuste fue rechazada. Ingresa a MedicAI para revisar los detalles."
+            ),
+            severity=severity,
+            metadata={"adjustmentId": adjustment.id, "status": payload.status.value},
+        )
+        db.add_notification(notification)
+
+        return {
+            "adjustment": adjustment.dict(),
+            "carePlanRevision": revision_dict,
+            "notification": notification.dict(),
+        }
+
+
+    @app.post("/icd10/suggest")
+    async def suggest_icd10_codes(
+        payload: ICD10SuggestRequest,
+        current_user: User = Depends(get_current_doctor)
+    ) -> Dict[str, Any]:
+        suggestions = icd10_suggester.suggest(
+            payload.text,
+            review_threshold=payload.review_threshold
+        )
+        return {"codes": suggestions}
+
+    @app.get("/calculate")
+    async def calculate_tool(
+        tool: str,
+        inputs: Optional[str] = None,
+        current_user: User = Depends(get_current_doctor)
+    ) -> Dict[str, Any]:
+        try:
+            parsed_inputs = json.loads(inputs) if inputs else {}
+        except json.JSONDecodeError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="inputs must be valid JSON"
+            ) from exc
+
+        try:
+            result = calculators.calculate(tool, parsed_inputs)
+        except CalculatorError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc)
+            ) from exc
+
+        return result
+
+    @app.post("/observations/batch", status_code=status.HTTP_202_ACCEPTED)
+    async def ingest_observation_batch(
+        payload: ObservationBatchRequest,
+        current_user: User = Depends(get_current_user)
+    ) -> Dict[str, Any]:
+        if current_user.user_type == UserType.PATIENT and payload.patient_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Patients can only submit observations for themselves"
+            )
+        if not payload.observations:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="At least one observation is required"
+            )
+
+        observations: List[Observation] = []
+        for obs_input in payload.observations:
+            obs_data = {
+                "patient_id": payload.patient_id,
+                "code": obs_input.code.lower(),
+                "value": obs_input.value,
+                "unit": obs_input.unit,
+                "effective_at": obs_input.effective_at,
+                "source": obs_input.source,
+            }
+            if obs_input.id:
+                obs_data["id"] = obs_input.id
+            observations.append(Observation(**obs_data))
+
+        generated_alerts = alerts_engine.process_observations(payload.patient_id, observations)
+
+        return {
+            "ingested": len(observations),
+            "generatedAlerts": [alert.dict() for alert in generated_alerts],
+        }
+
+    @app.post("/alerts/{alert_id}/status")
+    async def update_alert_status(
+        alert_id: str,
+        payload: AlertStatusUpdate,
+        current_user: User = Depends(get_current_doctor)
+    ) -> Dict[str, Any]:
+        alert = db.get_alert_by_id(alert_id)
+        if alert is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Alert not found"
+            )
+
+        try:
+            updated = alerts_engine.transition_alert(
+                alert,
+                payload.status,
+                actor_id=current_user.id,
+                notes=payload.notes
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc)
+            ) from exc
+
+        return {"alert": updated.dict()}
+
+    @app.get("/dashboard/{patient_id}")
+    async def get_dashboard_summary(
+        patient_id: str,
+        current_user: User = Depends(get_current_user)
+    ) -> Dict[str, Any]:
+        if current_user.user_type == UserType.PATIENT and patient_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Patients can only view their own dashboard"
+            )
+
+        patient = db.get_user_by_id(patient_id)
+        if patient is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+
+        alerts_engine.evaluate_missing_data(patient_id)
+
+        observations = db.list_observations(patient_id)
+        last_vitals: Dict[str, Dict[str, Any]] = {}
+        for obs in observations:
+            if obs.code not in last_vitals:
+                last_vitals[obs.code] = {
+                    "value": obs.value,
+                    "unit": obs.unit,
+                    "timestamp": obs.effective_at,
+                }
+
+        series_map: Dict[str, List[Observation]] = {}
+        for obs in observations:
+            series_map.setdefault(obs.code, []).append(obs)
+
+        timeseries: List[Dict[str, Any]] = []
+        for code, series in series_map.items():
+            recent = list(reversed(series[:10]))
+            timeseries.append({
+                "code": code,
+                "points": [
+                    {"t": item.effective_at, "v": item.value}
+                    for item in recent
+                ],
+            })
+
+        active_alerts = db.list_active_alerts(patient_id)
+        alert_items = db.list_alerts_by_patient(patient_id, include_closed=False)
+        alerts_payload = [
+            {
+                "id": alert.id,
+                "code": alert.code,
+                "severity": alert.severity.value,
+                "status": alert.status.value,
+                "observedAt": alert.observed_at,
+                "message": alert.context.get("message"),
+                "acknowledgedAt": alert.acknowledged_at,
+                "resolvedAt": alert.resolved_at,
+                "closedAt": alert.closed_at,
+            }
+            for alert in alert_items
+        ]
+
+        careplan_active = bool(db.list_careplan_revisions(patient_id))
+
+        return {
+            "patientId": patient_id,
+            "patientName": patient.full_name,
+            "careplanActive": careplan_active,
+            "activeAlerts": len(active_alerts),
+            "alerts": alerts_payload,
+            "lastVitals": last_vitals,
+            "timeseries": timeseries,
+            "adherenceRate": None,
+        }
+
+    @app.get("/notifications")
+    async def list_notifications(current_user: User = Depends(get_current_user)) -> Dict[str, Any]:
+        notifications = db.list_notifications(current_user.id)
+        return {"notifications": [note.dict() for note in notifications]}
+
     @app.get("/doctors")
     async def get_doctors() -> Dict[str, Any]:
         """Get list of all doctors"""
@@ -484,5 +818,6 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
 
 

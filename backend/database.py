@@ -3,10 +3,10 @@ import os
 import secrets
 import string
 from typing import Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 
-from .models import User, ClinicalRecord, PatientAccess, UserType, VitalSigns
+from .models import (User, ClinicalRecord, PatientAccess, UserType, VitalSigns, TreatmentAdjustment, AdjustmentAuditEntry, CarePlanRevision, Notification, AdjustmentStatus, NotificationSeverity, Observation, Alert, AlertTimelineEntry, AlertStatus, AlertSeverity)
 
 
 class SimpleDatabase:
@@ -19,12 +19,19 @@ class SimpleDatabase:
         self.users_file = os.path.join(data_dir, "users.json")
         self.records_file = os.path.join(data_dir, "clinical_records.json")
         self.access_file = os.path.join(data_dir, "patient_access.json")
+        self.adjustments_file = os.path.join(data_dir, "adjustments.json")
+        self.observations_file = os.path.join(data_dir, "observations.json")
+        self.careplan_revisions_file = os.path.join(data_dir, "careplan_revisions.json")
+        self.audit_log_file = os.path.join(data_dir, "audit_log.json")
+        self.notifications_file = os.path.join(data_dir, "notifications.json")
+        self.alerts_file = os.path.join(data_dir, "alerts.json")
+        self.alert_events_file = os.path.join(data_dir, "alert_events.json")
         
         self._init_files()
     
     def _init_files(self):
         """Initialize empty JSON files if they don't exist"""
-        for file_path in [self.users_file, self.records_file, self.access_file]:
+        for file_path in [self.users_file, self.records_file, self.access_file, self.adjustments_file, self.observations_file, self.careplan_revisions_file, self.audit_log_file, self.notifications_file, self.alerts_file, self.alert_events_file]:
             if not os.path.exists(file_path):
                 with open(file_path, 'w') as f:
                     json.dump([], f)
@@ -157,6 +164,176 @@ class SimpleDatabase:
                 return User(**user_dict)
         return None
     
+
+    # Treatment adjustment operations
+    def create_adjustment(self, adjustment: TreatmentAdjustment) -> TreatmentAdjustment:
+        adjustments = self._load_json(self.adjustments_file)
+        adjustments.append(adjustment.dict())
+        self._save_json(self.adjustments_file, adjustments)
+        for entry in adjustment.audit_trail:
+            self._record_audit_event(entry)
+        return adjustment
+
+    def get_adjustment_by_id(self, adjustment_id: str) -> Optional[TreatmentAdjustment]:
+        adjustments = self._load_json(self.adjustments_file)
+        for item in adjustments:
+            if item.get('id') == adjustment_id:
+                return TreatmentAdjustment(**item)
+        return None
+
+    def list_patient_adjustments(self, patient_id: str) -> List[TreatmentAdjustment]:
+        adjustments = self._load_json(self.adjustments_file)
+        return [TreatmentAdjustment(**item) for item in adjustments if item.get('patient_id') == patient_id]
+
+    def list_all_adjustments(self) -> List[TreatmentAdjustment]:
+        adjustments = self._load_json(self.adjustments_file)
+        return [TreatmentAdjustment(**item) for item in adjustments]
+
+    def list_pending_adjustments(self) -> List[TreatmentAdjustment]:
+        adjustments = self._load_json(self.adjustments_file)
+        return [TreatmentAdjustment(**item) for item in adjustments if item.get('status') in {AdjustmentStatus.REQUESTED, AdjustmentStatus.UNDER_REVIEW}]
+
+    def update_adjustment(self, adjustment: TreatmentAdjustment) -> TreatmentAdjustment:
+        adjustments = self._load_json(self.adjustments_file)
+        updated = False
+        for idx, item in enumerate(adjustments):
+            if item.get('id') == adjustment.id:
+                adjustments[idx] = adjustment.dict()
+                updated = True
+                break
+        if not updated:
+            raise ValueError(f"Adjustment {adjustment.id} not found")
+        self._save_json(self.adjustments_file, adjustments)
+        if adjustment.audit_trail:
+            self._record_audit_event(adjustment.audit_trail[-1])
+        return adjustment
+
+    def append_adjustment_audit(self, adjustment_id: str, entry: AdjustmentAuditEntry) -> Optional[TreatmentAdjustment]:
+        adjustments = self._load_json(self.adjustments_file)
+        updated_item = None
+        for idx, item in enumerate(adjustments):
+            if item.get('id') == adjustment_id:
+                trail = item.setdefault('audit_trail', [])
+                trail.append(entry.dict())
+                adjustments[idx] = item
+                updated_item = TreatmentAdjustment(**item)
+                break
+        if updated_item is not None:
+            self._save_json(self.adjustments_file, adjustments)
+            self._record_audit_event(entry)
+        return updated_item
+
+    # Observation operations
+    def add_observations(self, observations: List[Observation]) -> List[Observation]:
+        stored = self._load_json(self.observations_file)
+        for observation in observations:
+            stored.append(observation.dict())
+        self._save_json(self.observations_file, stored)
+        return observations
+
+    def list_observations(self, patient_id: str, code: Optional[str] = None) -> List[Observation]:
+        stored = self._load_json(self.observations_file)
+        result: List[Observation] = []
+        for item in stored:
+            if item.get('patient_id') != patient_id:
+                continue
+            if code and item.get('code') != code:
+                continue
+            result.append(Observation(**item))
+        result.sort(key=lambda obs: obs.effective_at, reverse=True)
+        return result
+
+    def get_last_observation(self, patient_id: str, code: str) -> Optional[Observation]:
+        observations = self.list_observations(patient_id, code)
+        return observations[0] if observations else None
+
+    def get_recent_observations(self, patient_id: str, code: str, within_minutes: int) -> List[Observation]:
+        cutoff = datetime.now() - timedelta(minutes=within_minutes)
+        observations = self.list_observations(patient_id, code)
+        return [obs for obs in observations if obs.effective_at >= cutoff]
+
+    # Alert operations
+    def create_alert(self, alert: Alert, entry: AlertTimelineEntry) -> Alert:
+        alert.timeline.append(entry)
+        alert.updated_at = datetime.now()
+        return self.save_alert(alert, entry)
+
+    def save_alert(self, alert: Alert, timeline_entry: Optional[AlertTimelineEntry] = None) -> Alert:
+        alerts = self._load_json(self.alerts_file)
+        updated = False
+        alert_dict = alert.dict()
+        for idx, item in enumerate(alerts):
+            if item.get('id') == alert.id:
+                alerts[idx] = alert_dict
+                updated = True
+                break
+        if not updated:
+            alerts.append(alert_dict)
+        self._save_json(self.alerts_file, alerts)
+        if timeline_entry is not None:
+            self._record_alert_event(timeline_entry)
+        return alert
+
+    def get_alert_by_id(self, alert_id: str) -> Optional[Alert]:
+        alerts = self._load_json(self.alerts_file)
+        for item in alerts:
+            if item.get('id') == alert_id:
+                return Alert(**item)
+        return None
+
+    def list_alerts_by_patient(self, patient_id: str, include_closed: bool = False) -> List[Alert]:
+        alerts = self._load_json(self.alerts_file)
+        result: List[Alert] = []
+        for item in alerts:
+            if item.get('patient_id') != patient_id:
+                continue
+            if not include_closed and item.get('status') == AlertStatus.CLOSED:
+                continue
+            result.append(Alert(**item))
+        result.sort(key=lambda alert: alert.created_at, reverse=True)
+        return result
+
+    def list_active_alerts(self, patient_id: str) -> List[Alert]:
+        alerts = self.list_alerts_by_patient(patient_id, include_closed=False)
+        return [alert for alert in alerts if alert.status in (AlertStatus.OPEN, AlertStatus.ACKNOWLEDGED)]
+
+    def save_alert_with_entry(self, alert: Alert, entry: AlertTimelineEntry) -> Alert:
+        alert.timeline.append(entry)
+        alert.updated_at = datetime.now()
+        return self.save_alert(alert, entry)
+
+    def _record_alert_event(self, entry: AlertTimelineEntry):
+        events = self._load_json(self.alert_events_file)
+        events.append(entry.dict())
+        self._save_json(self.alert_events_file, events)
+
+    # Care plan revisions
+    def create_careplan_revision(self, revision: CarePlanRevision) -> CarePlanRevision:
+        revisions = self._load_json(self.careplan_revisions_file)
+        revisions.append(revision.dict())
+        self._save_json(self.careplan_revisions_file, revisions)
+        return revision
+
+    def list_careplan_revisions(self, patient_id: str) -> List[CarePlanRevision]:
+        revisions = self._load_json(self.careplan_revisions_file)
+        return [CarePlanRevision(**item) for item in revisions if item.get('patient_id') == patient_id]
+
+    # Notifications
+    def add_notification(self, notification: Notification) -> Notification:
+        notifications = self._load_json(self.notifications_file)
+        notifications.append(notification.dict())
+        self._save_json(self.notifications_file, notifications)
+        return notification
+
+    def list_notifications(self, user_id: str) -> List[Notification]:
+        notifications = self._load_json(self.notifications_file)
+        return [Notification(**item) for item in notifications if item.get('user_id') == user_id]
+
+    def _record_audit_event(self, entry: AdjustmentAuditEntry):
+        audit_entries = self._load_json(self.audit_log_file)
+        audit_entries.append(entry.dict())
+        self._save_json(self.audit_log_file, audit_entries)
+
     def calculate_bmi(self, weight: float, height: float) -> float:
         """Calculate BMI from weight (kg) and height (cm)"""
         if height <= 0:
