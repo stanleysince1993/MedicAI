@@ -4,17 +4,24 @@ import subprocess
 import asyncio
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy.orm import Session
+
 from fastapi import FastAPI, HTTPException, Depends, status
-from fastapi.responses import RedirectResponse, FileResponse
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 # Local imports
+from .config import get_settings
 from .services.openai_service import OpenAIAnalyzer, FallbackAnalyzer
-from .services.alert_engine import AlertEngine
+from .services.alert_engine import AlertEngine, basic_threshold_alerts
 from .services.icd10_suggester import icd10_suggester
 from .services.calculators import calculators, CalculatorError
+from .services.observation_validator import (
+    ObservationValidationError,
+    validate_observation,
+)
 from .models import (
     User, ClinicalRecord, PatientAccess, UserType, VitalSigns,
     LoginRequest, RegisterRequest, ClinicalRecordRequest, SharePatientRequest,
@@ -24,6 +31,8 @@ from .models import (
     ObservationBatchRequest, Observation, AlertStatusUpdate, AlertStatus
 )
 from .database import db
+from .db.session import get_session
+from .db.models import AlertORM, ObservationORM, PatientORM
 from .auth import hash_password, verify_password, create_token, get_current_user, get_current_doctor, get_current_patient
 
 
@@ -66,19 +75,20 @@ class TerminalResponse(BaseModel):
 
 
 def create_app() -> FastAPI:
+    settings = get_settings()
     app = FastAPI(title="MedicAI - Clinical Assistant MVP", version="0.1.0")
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=settings.allowed_cors_origins or ["*"],
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
     )
 
     # Initialize analyzers
-    openai_api_key = os.getenv("OPENAI_API_KEY")
-    model = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    openai_api_key = settings.openai_api_key
+    model = settings.openai_model
     openai_enabled = bool(openai_api_key)
 
     openai_analyzer: Optional[OpenAIAnalyzer] = None
@@ -147,7 +157,7 @@ def create_app() -> FastAPI:
             )
             
             created_user = db.create_user(user)
-            token = create_token(created_user.id)
+            token = create_token(created_user.id, created_user.user_type)
             
             return {
                 "message": "User registered successfully",
@@ -178,7 +188,7 @@ def create_app() -> FastAPI:
                 detail="Account is inactive"
             )
         
-        token = create_token(user.id)
+        token = create_token(user.id, user.user_type)
         
         return {
             "message": "Login successful",
@@ -606,7 +616,8 @@ def create_app() -> FastAPI:
     @app.post("/observations/batch", status_code=status.HTTP_202_ACCEPTED)
     async def ingest_observation_batch(
         payload: ObservationBatchRequest,
-        current_user: User = Depends(get_current_user)
+        current_user: User = Depends(get_current_user),
+        session: Session = Depends(get_session),
     ) -> Dict[str, Any]:
         if current_user.user_type == UserType.PATIENT and payload.patient_id != current_user.id:
             raise HTTPException(
@@ -619,26 +630,55 @@ def create_app() -> FastAPI:
                 detail="At least one observation is required"
             )
 
-        observations: List[Observation] = []
-        for obs_input in payload.observations:
-            obs_data = {
-                "patient_id": payload.patient_id,
-                "code": obs_input.code.lower(),
-                "value": obs_input.value,
-                "unit": obs_input.unit,
-                "effective_at": obs_input.effective_at,
-                "source": obs_input.source,
-            }
-            if obs_input.id:
-                obs_data["id"] = obs_input.id
-            observations.append(Observation(**obs_data))
+        generated_alerts: List[Dict[str, str]] = []
+        accepted = 0
 
-        generated_alerts = alerts_engine.process_observations(payload.patient_id, observations)
+        try:
+            patient = session.get(PatientORM, payload.patient_id)
+            if patient is None:
+                patient = PatientORM(id=payload.patient_id)
+                session.add(patient)
 
-        return {
-            "ingested": len(observations),
-            "generatedAlerts": [alert.dict() for alert in generated_alerts],
-        }
+            for obs_input in payload.observations:
+                normalized_code, numeric_value = validate_observation(
+                    obs_input.code,
+                    obs_input.unit,
+                    obs_input.value,
+                )
+
+                observation_row = ObservationORM(
+                    patient_id=payload.patient_id,
+                    code=normalized_code,
+                    unit=obs_input.unit.lower() if obs_input.unit else None,
+                    value_text=str(obs_input.value),
+                    value_numeric=numeric_value,
+                    effective_at=obs_input.effective_at,
+                    source=obs_input.source or "manual",
+                )
+                session.add(observation_row)
+                accepted += 1
+
+                for alert in basic_threshold_alerts(normalized_code, numeric_value):
+                    alert_row = AlertORM(
+                        patient_id=payload.patient_id,
+                        code=normalized_code,
+                        rule=alert["rule"],
+                        severity=alert["severity"],
+                        message=alert["message"],
+                        observed_at=obs_input.effective_at,
+                    )
+                    session.add(alert_row)
+                    generated_alerts.append(alert)
+
+            session.commit()
+        except ObservationValidationError as exc:
+            session.rollback()
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+        except Exception:
+            session.rollback()
+            raise
+
+        return {"ingested": accepted, "generatedAlerts": generated_alerts}
 
     @app.post("/alerts/{alert_id}/status")
     async def update_alert_status(
