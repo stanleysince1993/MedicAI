@@ -263,3 +263,26 @@ class AlertEngine:
 
 
 alert_engine = AlertEngine()
+def basic_threshold_alerts(code: str, numeric_value: Optional[float]) -> List[Dict[str, str]]:
+    """Evaluate simple threshold-based alerts for a single observation."""
+    if numeric_value is None:
+        return []
+
+    normalized = code.lower()
+    alerts: List[Dict[str, str]] = []
+
+    if normalized in {"spo2", "oxygen_saturation"} and numeric_value < 88:
+        alerts.append({
+            "rule": "low_spo2",
+            "severity": "critical",
+            "message": "SpO2 below 88%",
+        })
+
+    if normalized == "glucose" and numeric_value < 54:
+        alerts.append({
+            "rule": "low_glucose",
+            "severity": "critical",
+            "message": "Glucose below 54 mg/dL",
+        })
+
+    return alerts

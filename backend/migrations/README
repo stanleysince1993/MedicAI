@@ -1,0 +1,9 @@
+This directory stores Alembic migration scripts.
+
+Generate a new migration with:
+
+    alembic revision -m "describe change" --autogenerate
+
+Apply migrations:
+
+    alembic upgrade head

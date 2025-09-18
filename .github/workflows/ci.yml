@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: medicai
+          POSTGRES_PASSWORD: medicai
+          POSTGRES_DB: medicai
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U medicai" --health-interval=10s
+          --health-timeout=5s --health-retries=5
+    env:
+      DATABASE_URL: postgresql+psycopg2://medicai:medicai@localhost:5432/medicai
+      JWT_SECRET: test-secret-change-me
+      JWT_EXPIRES_MIN: "15"
+      CORS_ORIGINS: http://localhost
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Prepare environment
+        run: cp .env.example .env
+
+      - name: Wait for database\n        run: |\n          for i in {1..15}; do\n            pg_isready -h localhost -p 5432 -U medicai && break\n            sleep 2\n          done
+
+      - name: Run migrations
+        run: alembic upgrade head
+
+      - name: Run tests
+        run: pytest -q
+
+

@@ -48,5 +48,30 @@ Response
 ### Disclaimer
 This is a demo for educational purposes only. Not for clinical use.
 
+### Database & Migrations
 
+PostgreSQL is required for observations, alerts, and adjustments. By default the app reads connection details from `.env` via `pydantic-settings`.
 
+```bash
+cp .env.example .env
+alembic upgrade head
+uvicorn backend.main:app --reload
+```
+
+### Testing
+
+```bash
+pytest -q
+```
+
+### Docker Development
+
+```bash
+cp backend/.env.example backend/.env
+make compose-up          # builds and starts db + api + adminer
+make migrate             # runs alembic upgrade head inside the container
+make logs                # follow API logs
+docker compose down      # stop services
+```
+
+Adminer is available at http://localhost:8080 (server `db`, user `medicai`, password `medicai`).
